@@ -413,8 +413,14 @@ comb_factor.df  <- merge(DER.df,DER_norm_CI.df,
 lsoa_linc <-  readOGR(dsn = geo_dir,
                  layer = "Lincolnshire LSOA")
 
+## UK data
+uk_geo <-  readOGR(dsn = geo_dir,
+                      layer = "Map_UK")
+
 ### Project to Lat Long
 lsoa_linc_ll <- spTransform(lsoa_linc, CRS("+init=epsg:4326"))
+
+uk_geo_ll <- spTransform(uk_geo, CRS("+init=epsg:4326"))
 
 ## merge factor data 
 
@@ -485,6 +491,25 @@ lsoa_linc_map <- leaflet(options = leafletOptions(minZoom = 9)) %>%
   #                                    "fac_poly"))
 
 setView(lsoa_linc_map, lng=-0.1999702,lat=53.1178821,zoom = 9.4)
+
+
+
+linc_base_map <- leaflet(options = leafletOptions(minZoom = 9)) %>%
+  # Choose here whether to use Open Street Map or Satellite imagery data in the background
+  # addProviderTiles("Esri.WorldImagery") %>%
+  addProviderTiles("OpenStreetMap.Mapnik") %>%
+  addMapPane(name = "maplabels", zIndex = 420) %>% # higher zIndex rendered on top
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addProviderTiles("CartoDB.PositronOnlyLabels", 
+                   options = leafletOptions(pane = "maplabels"),
+                   group = "map labels") %>%
+  addPolygons(data = uk_geo_ll, stroke = TRUE, 
+                          weight=1.0,
+              fillOpacity = 0.0)
+
+
+setView(linc_base_map, lng=-0.1999702,lat=53.1178821,zoom = 9.4)
+
 
 ## Save as png
 # map_file <- 'linc_factor_map.png'

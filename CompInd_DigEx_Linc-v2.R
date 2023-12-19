@@ -13,6 +13,8 @@ rm(list = ls())
 # install.packages("pacman")
 
 # Define vector of package names
+# NB Some of these packages may have been used in the development 
+# But are no longer needed in this version of the code
 
 package_names <- c("readr","readxl","dplyr","ggplot2","corrplot","psych",
                    "scales","ggiraph","ggrepel","Compind","ggcorrplot","kableExtra",
@@ -21,8 +23,7 @@ package_names <- c("readr","readxl","dplyr","ggplot2","corrplot","psych",
                    "devtools","PerformanceAnalytics","hrbrthemes",
                    "Hmisc","PerformanceAnalytics","psych","Rcsdp","GPArotation",
                    "BBmisc","rgdal", "leaflet","sp","plotly","htmlwidgets","mapview",
-                   "forcats","htmltools")
-
+                   "forcats","htmltools","Matrix")
 
 
 # This code installs all the other required packages if they are not currently installed and load all the libraries
@@ -33,7 +34,7 @@ rm(package_names)
 
 
 
-
+#### Defining functions which will be used in the code
 ### Functions 
 
 
@@ -46,57 +47,6 @@ left_align <- function(plot_name, pieces){
   return(grob)
 }
 # 
-# unhcr_style <- function() {
-#   font <- "Lato"
-#   ggplot2::theme(
-#     
-#     #This sets the font, size, type and colour of text for the chart's title
-#     plot.title = ggplot2::element_text(family = font, size = 20,
-#                                        face = "bold", color = "#222222"),
-#     
-#     # This sets the font, size, type and colour of text for the chart's subtitle,
-#     # as well as setting a margin between the title and the subtitle
-#     plot.subtitle = ggplot2::element_text(family = font, size = 16, 
-#                                           margin = ggplot2::margin(9,0,9,0)),
-#     plot.caption = ggplot2::element_blank(),
-#     
-#     # This sets the position and alignment of the legend, removes a title 
-#     # and backround for it and sets the requirements for any text within the legend.
-#     # The legend may often need some more manual tweaking when it comes to its exact
-#     # position based on the plot coordinates.
-#     legend.position = "top",
-#     legend.text.align = 0,
-#     legend.background = ggplot2::element_blank(),
-#     legend.title = ggplot2::element_blank(),
-#     legend.key = ggplot2::element_blank(),
-#     legend.text = ggplot2::element_text(family = font, size = 13, color = "#222222"),
-#     
-#     # This sets the text font, size and colour for the axis test, as well as setting
-#     # the margins and removes lines and ticks. In some cases, axis lines and axis 
-#     # ticks are things we would want to have in the chart
-#     axis.title = ggplot2::element_blank(),
-#     axis.text = ggplot2::element_text(family = font, size = 13, color = "#222222"),
-#     axis.text.x = ggplot2::element_text(margin = ggplot2::margin(5, b = 10)),
-#     axis.ticks = ggplot2::element_blank(),
-#     axis.line = ggplot2::element_blank(),
-#     
-#     # This removes all minor gridlines and adds major y gridlines. 
-#     # In many cases you will want to change this to remove y gridlines and add x gridlines. 
-#     panel.grid.minor = ggplot2::element_blank(),
-#     panel.grid.major.y = ggplot2::element_line(color = "#cbcbcb"),
-#     panel.grid.major.x = ggplot2::element_blank(),
-#     
-#     # This sets the panel background as blank, removing the standard grey
-#     # ggplot background colour from the plot
-#     panel.background = ggplot2::element_blank(),
-#     
-#     # This sets the panel background for facet-wrapped plots to white, 
-#     # removing the standard grey ggplot background colour and sets the title size 
-#     # of the facet-wrap title to font size 22
-#     strip.background = ggplot2::element_rect(fill = "white"),
-#     strip.text = ggplot2::element_text(size  = 13,  hjust = 0)
-#   )
-# }
 
 chart.Correlation <- function (R, histogram = TRUE, method_corr ,cex,sym_cex, ...) 
 {
@@ -141,19 +91,23 @@ chart.Correlation <- function (R, histogram = TRUE, method_corr ,cex,sym_cex, ..
 
 
 ### Load data 
+#### 
 
-
-
+### Directory for the raw data files
 data_dir <- 'C:/Users/pmee/OneDrive - University of Lincoln/Projects/Digital_Exclusion_Lincolnshire/Data/'
+### Directory for the GIS data
 geo_dir <- 'C:/Users/pmee/OneDrive - University of Lincoln/Projects/Digital_Exclusion_Lincolnshire/gis/'
-data_file <- 'Digital Exclusion Rankings.csv'
+### Output directory 
 out_dir <- 'C:/Users/pmee/OneDrive - University of Lincoln/Projects/Digital_Exclusion_Lincolnshire/Figures/'
-ref_dir <- 'C:/Users/pmee/OneDrive - University of Lincoln/Projects/Digital_Exclusion_Lincolnshire/refs/'
 
+### Original equal weight rankings 
+data_file <- 'Digital Exclusion Rankings.csv'
 ## Ranked data 
+### Loading orginal rankings and overall equal weight rankings 
+### Rankings from 1 most deprived to n least deprived
 DER.df <- read.csv2(file=paste0(data_dir,data_file),header = TRUE,sep = ",")
 
-### Rename columns 
+### Rename columns for consistency with other dataframes
 
 names(DER.df)[6] <- "NQU"
 names(DER.df)[7] <- "GPC"
@@ -164,12 +118,13 @@ names(DER.df)[11] <- "LAC"
 names(DER.df)[12] <- "TRP"
 names(DER.df)[13] <- "EXP"
 
-DER_cor.df <- DER.df[, c(6:13)]
 
-### Load raw data 
+### Load raw data - sources of data used in the rankings 
 
 data_raw <- 'Source_data_Lincoln-v3_March_2023.xlsx'
-DER_raw.df <- readxl::read_xlsx(paste0(data_dir,data_raw),range = "A3:T423",col_names = TRUE )
+DER_linc.df <- readxl::read_xlsx(paste0(data_dir,data_raw),range = "A3:T423",col_names = TRUE )
+
+DER_raw.df <- DER_linc.df 
 
 ### Rename columns 
 
@@ -194,59 +149,73 @@ names(DER_raw.df)[18] <- "exp_email"
 names(DER_raw.df)[19] <- "exp_im"
 names(DER_raw.df)[20] <- "exp_sn"
 
+### STEP 1 - Data normalisation 
+### Normalise the data so all variables in the same range
+### To enable appropriate comparison 
 
-
-
-
-
-### Data normalisation 
 ### Applying z score normalisation - mean = 0 sd = 1 
 DER_raw_norm.df <- DER_raw.df
 DER_raw_norm.df[-(1:4)] <- lapply(DER_raw_norm.df[-(1:4)], BBmisc::normalize)
 
+### Raw data 
+p1 <- ggplot(DER_raw.df, aes(x=unp_rate)) + 
+  geom_histogram()
+p1
+### Normalised data
+p2 <- ggplot(DER_raw_norm.df, aes(x=unp_rate)) + 
+  geom_histogram()
+p2
 
-### Checking effect
 
-DER_check.df <- merge(DER.df,DER_raw_norm.df,by.x="LSOA.Code",by.y="lsoa_code")
-
-ggplot(DER_check.df, aes(x=gpc_rate, y=GPC)) + 
-  geom_point()
+# ### Checking effect
+# 
+# DER_check.df <- merge(DER.df,DER_raw_norm.df,by.x="LSOA.Code",by.y="lsoa_code")
+# 
+# ggplot(DER_check.df, aes(x=gpc_rate, y=GPC)) + 
+#   geom_point()
 
 
 ## Inverting order of variables so that lowest score = biggest problem
+
 DER_raw_norm.df$de_pc <- DER_raw_norm.df$de_pc*-1
 DER_raw_norm.df$gpc_rate <- DER_raw_norm.df$gpc_rate*-1
 DER_raw_norm.df$lac_pc <- DER_raw_norm.df$lac_pc*-1
 DER_raw_norm.df$nqr_pc <- DER_raw_norm.df$nqr_pc*-1
 DER_raw_norm.df$unp_rate <- DER_raw_norm.df$unp_rate*-1
+DER_raw_norm.df$lt10mb_pc <- DER_raw_norm.df$lt10mb_pc*-1
 
 
+## Experian
+## Indicator equals proportion using each technology or for ns (proportion not savvy).
+## Therefore for ns change sign 
+DER_raw_norm.df$lt10mb_pc <- DER_raw_norm.df$exp_ns*-1
 
+#### Some indices combine multiple raw variables
+#### This combination was done to generate the individual combined indices used in the original 
+#### Lincolnshire Index
 
 ## Recalculate combined indices based on normalised scores
 ## Add normalised values and take average
-## Internet 
-## two internet variables scale in different directions
-DER_raw_norm.df$int_comb <- (DER_raw_norm.df$dwnld_speed + -1*DER_raw_norm.df$lt10mb_pc)/2
-## GP travel 
+## Internet - combine download speed + % households < 10 MB/s 
+DER_raw_norm.df$int_comb <- (DER_raw_norm.df$dwnld_speed + DER_raw_norm.df$lt10mb_pc)/2
+
+
+## GP and pharmacy travel - combine 4 indices which represent travel times and take an average 
 DER_raw_norm.df$tran_comb <- (DER_raw_norm.df$gp_pt15 + DER_raw_norm.df$gp_pt30 
                                                       + DER_raw_norm.df$gp_car15 + DER_raw_norm.df$gp_pharm15)/4
 
 ## Experian
 ## Indicator equals proportion using each technology or for ns (proportion not savvy).
 ## Therefore for ns change sign 
-DER_raw_norm.df$exp_comb <- (DER_raw_norm.df$exp_smph + -1*DER_raw_norm.df$exp_ns
+DER_raw_norm.df$exp_comb <- (DER_raw_norm.df$exp_smph + DER_raw_norm.df$exp_ns
                              + DER_raw_norm.df$exp_email + DER_raw_norm.df$exp_im
                              + DER_raw_norm.df$exp_sn) /5
-
-
 
 
 ## Normalize combined variables 
 DER_raw_norm.df[-(1:20)] <- lapply(DER_raw_norm.df[c('int_comb','tran_comb','exp_comb')], BBmisc::normalize)
 
-## Create a matrix of normalised variables and rename for consistency
-
+## Create a dataframe of normalised variables and rename for consistency
 
 
 DER_norm_cor.df <- DER_raw_norm.df[ ,c('nqr_pc','gpc_rate','unp_rate','de_pc',
@@ -275,41 +244,43 @@ corr.matrix1 <- cor(DER_norm_cor.df, method = "spearman",  use = "pairwise.compl
 ### Call to chart.Correlation does not produce a print object 
 ### Print interactively using R studio  
 
+ ## Another approach to better visualize correlation between indicators is to 
+ ## represent them through a network with the ggpraph package.
+ 
+ this.indicators.label <- rownames(corr.matrix1)
+ 
+ ### for output
+ plot_name <- 'correlation_network' 
+ qgraph(cor(DER_norm_cor.df),
+        # shape = "circle",
+        # posCol = "darkgreen",
+        # negCol = "darkred",
+        # threshold = "bonferroni", #The threshold argument can be used to remove edges that are not significant.
+        # sampleSize = nrow(scores.this.norm),
+        # graph = "glasso",
+        esize = 35, ## Size of node
+        vsize = 6,
+        vTrans = 600,
+        posCol = "#003399", ## Color positive correlation Dark powder blue
+        negCol = "#FF9933", ## Color negative correlation Deep Saffron
+        alpha = 0.05,
+        cut = 0.4, ## cut off value for correlation
+        maximum = 1, ## cut off value for correlation
+        palette = 'pastel', # adjusting colors
+        borders = TRUE,
+        details = FALSE,
+        layout = "spring",
+        nodeNames = this.indicators.label ,
+        legend.cex = 0.4,
+        title = "Correlations Network for Digital Exclusion Indicators",
+        line = -2,
+        cex.main = 2,
+        filetype = "png",
+        filename = paste0(out_dir,plot_name))
+ 
  
 ## Another approach to better visualize correlation between indicators is to 
-## represent them through a network with the ggpraph package.
-
-this.indicators.label <- rownames(corr.matrix1)
-
-### for output
-plot_name <- 'correlation_network' 
-qgraph(cor(DER_norm_cor.df),
-                # shape = "circle",
-                # posCol = "darkgreen",
-                # negCol = "darkred",
-                # threshold = "bonferroni", #The threshold argument can be used to remove edges that are not significant.
-                # sampleSize = nrow(scores.this.norm),
-                # graph = "glasso",
-                esize = 35, ## Size of node
-                vsize = 6,
-                vTrans = 600,
-                posCol = "#003399", ## Color positive correlation Dark powder blue
-                negCol = "#FF9933", ## Color negative correlation Deep Saffron
-                alpha = 0.05,
-                cut = 0.4, ## cut off value for correlation
-                maximum = 1, ## cut off value for correlation
-                palette = 'pastel', # adjusting colors
-                borders = TRUE,
-                details = FALSE,
-                layout = "spring",
-                nodeNames = this.indicators.label ,
-                legend.cex = 0.4,
-                title = "Correlations Network for Digital Exclusion Indicators",
-                line = -2,
-                cex.main = 2,
-                filetype = "png",
-                filename = paste0(out_dir,plot_name))
-
+## represent them through a network with the ggpraph package
 
 # Cronbach’s alpha, (or coefficient alpha), developed by Lee Cronbach in 1951, 
 # measures reliability (i.e. how well a test measures what it should: 
@@ -332,12 +303,16 @@ cat(paste0("The Cronbach Alpha measure of consistency for this combination of in
 ##  Doing PCA with ci_factor.R
 # If method = "ONE" (default) the composite indicator estimated values are equal to first component scores;
 # if method = "ALL" the composite indicator estimated values are equal to component score multiplied by its proportion variance;
-# if method = "CH" it can be choose the number of the component to take into account.
+# if method = "CH" it can be choose the number of the components to take into account.
 
+###Create a temporary dataframe with just the required variables 
+DER_norm_tmp.df <- cbind(DER_raw_norm.df[1:3],DER_raw_norm.df[5:9],DER_raw_norm.df[21:23])
 
-DER_norm_tmp.df <- cbind(DER_raw_norm.df[5:9],DER_raw_norm.df[21:23])
-dimfactor <- ifelse(ncol(DER_norm_tmp.df) > 2, 3, ncol(DER_norm_tmp.df))
+### Dimfactor
+#dimfactor <- ifelse(ncol(DER_norm_tmp.df) > 2, 3, ncol(DER_norm_tmp.df))
+dimfactor = 5
 
+### Rename variables for consistency 
 DER_norm_tmp.df <- DER_norm_tmp.df %>% dplyr::rename(NQR = nqr_pc,
                                                      GPC = gpc_rate,
                                                      UNP = unp_rate,
@@ -351,7 +326,7 @@ DER_norm_tmp.df <- DER_norm_tmp.df %>% dplyr::rename(NQR = nqr_pc,
 ### Factor Method
 
 CI_Factor_estimated <-  Compind::ci_factor(DER_norm_tmp.df,
-                                           indic_col = (1:ncol(DER_norm_tmp.df)),
+                                           indic_col = (4:ncol(DER_norm_tmp.df)),
                                            method = "CH",  # if method = "CH" it can be choose the number of the component to take into account.
                                            dim = dimfactor)
 
@@ -362,9 +337,21 @@ names(ci_factor_est) <- "Factor_Score"
 ci_factor_est$Factor_Rank <- rank(ci_factor_est$Factor_Score,
                                        ties.method= "min",na.last="keep")
 
+
+### Add CI scores to orginal dataframe
+DER_norm_CI.df <- cbind(DER_raw_norm.df
+                        ,ci_factor_est)
+
+### Output for online tool
+
+DER_fact_summary.df <- DER_norm_CI.df[,c('la_name','lsoa_name','lsoa_code','Factor_Rank')]
+
+write.csv(DER_fact_summary.df,paste0(out_dir,'factor_rank.csv'))
+
+
 ### interpretation of factor analysis 
 #https://www.geo.fu-berlin.de/en/v/soga/Geodata-analysis/factor-analysis/A-simple-example-of-FA/index.html 
-digex.fa <- factanal(DER_norm_tmp.df, factors = 3)
+digex.fa <- factanal(DER_norm_tmp.df[,c(4:ncol(DER_norm_tmp.df))], factors = 3)
 digex.fa
 
 digex.fa$uniquenesses
@@ -373,28 +360,21 @@ digex.fa$loadings
 
 # Communality 
 fname = paste0(out_dir,'tmp.csv')
+
+
 tmp.df <- data.frame(apply(digex.fa$loadings^2,1,sum)) # communality
 
 names(tmp.df)[1] <- "comm"
 
 tmp.df$comm <- as.numeric(tmp.df$comm)
-write.csv(tmp.df,fname)
+
 
 # Uniqueness
-1 - apply(digex.fa$loadings^2,1,sum) # uniqueness
+tmp.df$unique <- 1 - apply(digex.fa$loadings^2,1,sum) # uniqueness
+
+write.csv(tmp.df,fname)
 
 
-
-
-### Add CI scores to orginal dataframe
-DER_norm_CI.df <- cbind(DER_raw_norm.df
-                            ,ci_factor_est)
-
-### Output for online tool
-
-DER_fact_summary.df <- DER_norm_CI.df[,c('la_name','lsoa_name','lsoa_code','Factor_Rank')]
-
-write.csv(DER_fact_summary.df,paste0(out_dir,'factor_rank.csv'))
 
 ## Comparing with orginal overall rank and factor score based on ranks
 ## Equal score share first rank i.e. joint 1st 
@@ -403,6 +383,7 @@ comb_factor.df  <- merge(DER.df,DER_norm_CI.df,
                          by.x="LSOA.Code",by.y="lsoa_code")
 
 ### Display on a map
+### Only needed if mapping in R 
 
 
 ### Read shapefile data 
@@ -491,9 +472,5 @@ setView(lsoa_linc_map, lng=-0.1999702,lat=53.1178821,zoom = 9.4)
 # mapview::mapshot(lsoa_linc_map, file = paste0(out_dir,map_file))
 
 
-### citation checking 
 
-# bibfile = paste0(ref_dir,"leaf.bib")
-# 
-# cat(toBibtex(citation(package = "leaflet")),file= bibfile)
 
