@@ -4,6 +4,11 @@
 ### https://humanitarian-user-group.github.io/post/compositeindicator/
 ############
 
+### To Do 
+### Sort out renames
+### Include uniqueness and communality
+### Produce map in a function
+
 # Clear any existing data from the data set
 rm(list = ls())
 
@@ -88,6 +93,77 @@ chart.Correlation <- function (R, histogram = TRUE, method_corr ,cex,sym_cex, ..
   else pairs(x, gap = 0, lower.panel = panel.smooth, upper.panel = panel.cor,cex=sym_cex, ...)
 }
 
+# ind_vec <- (c('la_name','lsoa_name','lsoa_code','gp_pt15','gp_pt30','gp_car15','pharm_car_15'))
+# ind_df <- DER_raw_norm.df
+# pk_n <- 3
+# dim_factor <- 3
+
+corr_gen <- function(ind_df,ind_vec,pk_n,corr_method,out_dir,plot_name){
+  ### Create a dataframe with just the required variables
+  tmp.df <- data.frame(ind_df[ind_vec])
+  tmp1.df <- data.frame(tmp.df [-(1:pk_n)])
+  ### Check correlation
+  ### Produces a plot which can be printed from R Studio
+  chart.Correlation(tmp1.df , method = c(corr_method)
+                    ,histogram=FALSE, pch=20, cex=2.5,sym_cex = 0.001)
+  corr.matrix1 <- cor(tmp1.df, method = corr_method,  use = "pairwise.complete.obs")
+  this.indicators.label <- rownames(corr.matrix1)
+  #### Plotting network diagram
+  qgraph(cor(tmp1.df),
+         # shape = "circle",
+         # posCol = "darkgreen",
+         # negCol = "darkred",
+         # threshold = "bonferroni", #The threshold argument can be used to remove edges that are not significant.
+         # sampleSize = nrow(scores.this.norm),
+         # graph = "glasso",
+         esize = 50, ## Size of node
+         vsize = 6,
+         vTrans = 500,
+         posCol = "#003399", ## Color positive correlation Dark powder blue
+         negCol = "#FF9933", ## Color negative correlation Deep Saffron
+         alpha = 0.05,
+         cut = 0.4, ## cut off value for correlation
+         maximum = 1, ## cut off value for correlation
+         palette = 'pastel', # adjusting colors
+         borders = TRUE,
+         details = FALSE,
+         layout = "spring",
+         nodeNames = this.indicators.label ,
+         legend.cex = 0.4,
+         title = "Correlations Network for Digital Exclusion Indicators",
+         line = -2,
+         cex.main = 1.5,
+         filetype = "png",
+         filename = paste0(out_dir,plot_name))
+}
+
+
+comp_ind_gen <- function(ind_df,ind_vec,pk_n,corr_method,dim_factor){
+  ### Create a dataframe with just the required variables
+  tmp.df <- data.frame(ind_df[ind_vec])
+  tmp1.df <- data.frame(tmp.df [-(1:pk_n)])
+  
+  index_1 <- pk_n+1
+  index_2 <- as.integer(ncol(tmp.df))
+  
+  #### Creating Composite Indicator
+  tmp3 <- data.matrix(tmp.df, rownames.force = NA)
+  CI_Factor_estimated <-  Compind::ci_factor(x=tmp.df,
+                                             indic_col = (index_1:index_2),
+                                             method = "CH",  # if method = "CH" it can be choose the number of the component to take into account.
+                                             dim = dim_factor)
+  
+  ci_factor_est <- data.frame( CI_Factor_estimated$ci_factor_est)
+  names(ci_factor_est) <- "Factor_Score"
+  
+  ci_factor_est$Factor_Rank <- rank(ci_factor_est$Factor_Score,
+                                    ties.method= "min",na.last="keep")
+  
+  Final_CI.df <- cbind(ind_df,ci_factor_est)
+  Final_CI.df
+  
+}
+
 
 
 ### Load data 
@@ -127,6 +203,9 @@ DER_linc.df <- readxl::read_xlsx(paste0(data_dir,data_raw),range = "A3:T423",col
 DER_raw.df <- DER_linc.df 
 
 ### Rename columns 
+#########
+### Better to use dplyr rename function to avoid any ambiguity with column positions 
+#########
 
 names(DER_raw.df)[1] <- "la_name"
 names(DER_raw.df)[2] <- "lsoa_name"
@@ -142,7 +221,7 @@ names(DER_raw.df)[11] <- "lt10mb_pc"
 names(DER_raw.df)[12] <- "gp_pt15"
 names(DER_raw.df)[13] <- "gp_pt30"
 names(DER_raw.df)[14] <- "gp_car15"
-names(DER_raw.df)[15] <- "gp_pharm15"
+names(DER_raw.df)[15] <- "pharm_car_15"
 names(DER_raw.df)[16] <- "exp_smph"
 names(DER_raw.df)[17] <- "exp_ns"
 names(DER_raw.df)[18] <- "exp_email"
@@ -190,157 +269,27 @@ DER_raw_norm.df$lt10mb_pc <- DER_raw_norm.df$lt10mb_pc*-1
 ## Therefore for ns change sign 
 DER_raw_norm.df$exp_ns <- DER_raw_norm.df$exp_ns*-1
 
-#### Some indices combine multiple raw variables
-#### This combination was done to generate the individual combined indices used in the original 
-#### Lincolnshire Index
+################
+### This Version pass sets of variables to a function which calculates combined index
+### and generates the other figures
+################
 
-## Recalculate combined indices based on normalised scores
-## Add normalised values and take average
-## Internet - combine download speed + % households < 10 MB/s 
-DER_raw_norm.df$int_comb <- (DER_raw_norm.df$dwnld_speed + DER_raw_norm.df$lt10mb_pc)/2
+trans_ind_vec <- (c('la_name','lsoa_name','lsoa_code','gp_pt15','gp_pt30','gp_car15','pharm_car_15'))
 
+Final_CI_transport <- comp_ind_gen(ind_df=DER_raw_norm.df
+                       ,ind_vec=trans_ind_vec
+                       ,pk_n=3
+                       ,corr_method=c("spearman")
+                       ,dim_factor=3)
 
-## GP and pharmacy travel - combine 4 indices which represent travel times and take an average 
-DER_raw_norm.df$tran_comb <- (DER_raw_norm.df$gp_pt15 + DER_raw_norm.df$gp_pt30 
-                                                      + DER_raw_norm.df$gp_car15 + DER_raw_norm.df$gp_pharm15)/4
+other_ind_vec <- (c('la_name','lsoa_name','lsoa_code','nqr_pc','gpc_rate','unp_rate','de_pc','lac_pc',
+                    'dwnld_speed','lt10mb_pc','exp_smph','exp_ns','exp_email','exp_im','exp_sn'))
 
-## Experian
-## Indicator equals proportion using each technology or for ns (proportion not savvy).
-## Therefore for ns change sign 
-DER_raw_norm.df$exp_comb <- (DER_raw_norm.df$exp_smph + DER_raw_norm.df$exp_ns
-                             + DER_raw_norm.df$exp_email + DER_raw_norm.df$exp_im
-                             + DER_raw_norm.df$exp_sn) /5
-
-
-## Normalize combined variables 
-DER_raw_norm.df[-(1:20)] <- lapply(DER_raw_norm.df[c('int_comb','tran_comb','exp_comb')], BBmisc::normalize)
-
-## Create a dataframe of normalised variables and rename for consistency
-
-
-DER_norm_cor.df <- DER_raw_norm.df[ ,c('nqr_pc','gpc_rate','unp_rate','de_pc',
-                                       'lac_pc','int_comb','tran_comb','exp_comb')] 
-
-
-DER_norm_cor.df <- DER_norm_cor.df %>% dplyr::rename(NQR = nqr_pc,
-                                                     GPC = gpc_rate,
-                                                     UNP = unp_rate,
-                                                     DER = de_pc,
-                                                     LAC = lac_pc,
-                                                     INT = int_comb,
-                                                     TRP = tran_comb,
-                                                     EXP = exp_comb)
-
-### Correlation analysis for normalised data 
-
-### Check correlation
-corr.matrix1 <- cor(DER_norm_cor.df, method = "spearman",  use = "pairwise.complete.obs")
-
-## Correlation with p values 
-
- chart.Correlation(DER_norm_cor.df , method = c("spearman")
-                  ,histogram=FALSE, pch=20, cex=2.5,sym_cex = 0.001)
-
-### Call to chart.Correlation does not produce a print object 
-### Print interactively using R studio  
-
- ## Another approach to better visualize correlation between indicators is to 
- ## represent them through a network with the ggpraph package.
- 
- this.indicators.label <- rownames(corr.matrix1)
- 
- ### for output
- plot_name <- 'correlation_network' 
- qgraph(cor(DER_norm_cor.df),
-        # shape = "circle",
-        # posCol = "darkgreen",
-        # negCol = "darkred",
-        # threshold = "bonferroni", #The threshold argument can be used to remove edges that are not significant.
-        # sampleSize = nrow(scores.this.norm),
-        # graph = "glasso",
-        esize = 35, ## Size of node
-        vsize = 6,
-        vTrans = 600,
-        posCol = "#003399", ## Color positive correlation Dark powder blue
-        negCol = "#FF9933", ## Color negative correlation Deep Saffron
-        alpha = 0.05,
-        cut = 0.4, ## cut off value for correlation
-        maximum = 1, ## cut off value for correlation
-        palette = 'pastel', # adjusting colors
-        borders = TRUE,
-        details = FALSE,
-        layout = "spring",
-        nodeNames = this.indicators.label ,
-        legend.cex = 0.4,
-        title = "Correlations Network for Digital Exclusion Indicators",
-        line = -2,
-        cex.main = 2,
-        filetype = "png",
-        filename = paste0(out_dir,plot_name))
- 
- 
-## Another approach to better visualize correlation between indicators is to 
-## represent them through a network with the ggpraph package
-
-# Cronbach’s alpha, (or coefficient alpha), developed by Lee Cronbach in 1951, 
-# measures reliability (i.e. how well a test measures what it should: 
-# measure of the stability of test scores), or internal consistency.
-# 
-# As a rule of thumbs, a score of more than 0.7 indicates an acceptable level of consistency:
-#   
-# A high level for alpha may mean that all indicators are highly correlated 
-# (meaning we have redundant indicators representing the same thing…).
-# A low value for alpha may mean that there are not enough indicators or that the 
-# indicators are poorly interrelated.
-
-Cronbach.this <- psych::alpha(DER_norm_cor.df, check.keys = TRUE)
-
-cat(paste0("The Cronbach Alpha measure of consistency for this combination of indicators is  "
-           , round(Cronbach.this$total$std.alpha, 2), "\n." ) )
-
-
-### Factor analysis with normalised vlaues 
-##  Doing PCA with ci_factor.R
-# If method = "ONE" (default) the composite indicator estimated values are equal to first component scores;
-# if method = "ALL" the composite indicator estimated values are equal to component score multiplied by its proportion variance;
-# if method = "CH" it can be choose the number of the components to take into account.
-
-###Create a temporary dataframe with just the required variables 
-DER_norm_tmp.df <- cbind(DER_raw_norm.df[1:3],DER_raw_norm.df[5:9],DER_raw_norm.df[21:23])
-
-### Dimfactor
-#dimfactor <- ifelse(ncol(DER_norm_tmp.df) > 2, 3, ncol(DER_norm_tmp.df))
-dimfactor = 5
-
-### Rename variables for consistency 
-DER_norm_tmp.df <- DER_norm_tmp.df %>% dplyr::rename(NQR = nqr_pc,
-                                                     GPC = gpc_rate,
-                                                     UNP = unp_rate,
-                                                     DER = de_pc,
-                                                     LAC = lac_pc,
-                                                     INT = int_comb,
-                                                     TRP = tran_comb,
-                                                     EXP = exp_comb)
-
-
-### Factor Method
-
-CI_Factor_estimated <-  Compind::ci_factor(DER_norm_tmp.df,
-                                           indic_col = (4:ncol(DER_norm_tmp.df)),
-                                           method = "CH",  # if method = "CH" it can be choose the number of the component to take into account.
-                                           dim = dimfactor)
-
-
-ci_factor_est <- data.frame( CI_Factor_estimated$ci_factor_est)
-names(ci_factor_est) <- "Factor_Score"
-
-ci_factor_est$Factor_Rank <- rank(ci_factor_est$Factor_Score,
-                                       ties.method= "min",na.last="keep")
-
-
-### Add CI scores to orginal dataframe
-DER_norm_CI.df <- cbind(DER_raw_norm.df
-                        ,ci_factor_est)
+Final_CI_main <- comp_ind_gen(ind_df=DER_raw_norm.df
+                                   ,ind_vec=other_ind_vec
+                                   ,pk_n=3
+                                   ,corr_method=c("pearson")
+                                   ,dim_factor=3)
 
 ### Output for online tool
 
@@ -374,13 +323,8 @@ tmp.df$unique <- 1 - apply(digex.fa$loadings^2,1,sum) # uniqueness
 
 write.csv(tmp.df,fname)
 
+#### Mapping
 
-
-## Comparing with orginal overall rank and factor score based on ranks
-## Equal score share first rank i.e. joint 1st 
-
-comb_factor.df  <- merge(DER.df,DER_norm_CI.df,
-                         by.x="LSOA.Code",by.y="lsoa_code")
 
 ### Display on a map
 ### Only needed if mapping in R 
@@ -399,8 +343,8 @@ lsoa_linc_ll <- spTransform(lsoa_linc, CRS("+init=epsg:4326"))
 
 ## merge factor data 
 
-lsoa_linc_ll_CI <- sp::merge(lsoa_linc_ll,comb_factor.df,
-                         by.x='AreaCode',by.y='LSOA.Code',all.x=TRUE)
+lsoa_linc_ll_CI <- sp::merge(lsoa_linc_ll,Final_CI_transport,
+                         by.x='AreaCode',by.y='lsoa_code',all.x=TRUE)
 
 ## Polygon Colours
 
