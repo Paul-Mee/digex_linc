@@ -8,6 +8,7 @@
 ### Sort out renames
 ### Include uniqueness and communality
 ### Produce map in a function
+### Do Low/Low High/High analysis
 
 # Clear any existing data from the data set
 rm(list = ls())
