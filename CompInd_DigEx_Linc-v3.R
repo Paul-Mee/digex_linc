@@ -29,7 +29,7 @@ package_names <- c("readr","readxl","dplyr","ggplot2","corrplot","psych",
                    "devtools","PerformanceAnalytics","hrbrthemes",
                    "Hmisc","PerformanceAnalytics","psych","Rcsdp","GPArotation",
                    "BBmisc","rgdal", "leaflet","sp","plotly","htmlwidgets","mapview",
-                   "forcats","htmltools","Matrix")
+                   "forcats","htmltools","Matrix","schoRsch")
 
 
 # This code installs all the other required packages if they are not currently installed and load all the libraries
@@ -54,7 +54,8 @@ left_align <- function(plot_name, pieces){
 }
 # 
 
-chart.Correlation <- function (R, histogram = TRUE, method_corr ,cex,sym_cex, ...) 
+### This makes a few tweaks to Chart Correlation
+Chart.Correlation_PM <- function (R, histogram = TRUE, method_corr ,cex,sym_cex, ...) 
 {
   x = checkData(R, method = "matrix")
 
@@ -94,20 +95,25 @@ chart.Correlation <- function (R, histogram = TRUE, method_corr ,cex,sym_cex, ..
   else pairs(x, gap = 0, lower.panel = panel.smooth, upper.panel = panel.cor,cex=sym_cex, ...)
 }
 
-# ind_vec <- (c('la_name','lsoa_name','lsoa_code','gp_pt15','gp_pt30','gp_car15','pharm_car_15'))
+# ind_vec <- (c('la_name','lsoa_name','lsoa_code','gp_pt15_pc','gp_pt30_pc','gp_car15_pc','pharm_car_15_pc'))
 # ind_df <- DER_raw_norm.df
 # pk_n <- 3
+# corr_method = "pearson"
 # dim_factor <- 3
 
-corr_gen <- function(ind_df,ind_vec,pk_n,corr_method,out_dir,plot_name){
+### This function generates the correlation plot and network diagram for the input variables 
+
+corr_gen <- function(ind_df,ind_vec,pk_n,corr_method,out_dir,corr_plot_name,net_plot_name){
   ### Create a dataframe with just the required variables
   tmp.df <- data.frame(ind_df[ind_vec])
   tmp1.df <- data.frame(tmp.df [-(1:pk_n)])
+  corr.matrix1 <- cor(tmp1.df, method = "spearman",  use = "pairwise.complete.obs")
   ### Check correlation
   ### Produces a plot which can be printed from R Studio
-  chart.Correlation(tmp1.df , method = c(corr_method)
-                    ,histogram=FALSE, pch=20, cex=2.5,sym_cex = 0.001)
-  corr.matrix1 <- cor(tmp1.df, method = corr_method,  use = "pairwise.complete.obs")
+  jpeg(paste0(out_dir,corr_plot_name,".jpg"), res = 300, width = 1000, height = 1000, pointsize = 9)
+  Chart.Correlation_PM(tmp1.df , method = c(corr_method)
+                    ,histogram=FALSE, pch=20, cex=1.5,sym_cex = 0.001)
+  dev.off()
   this.indicators.label <- rownames(corr.matrix1)
   #### Plotting network diagram
   qgraph(cor(tmp1.df),
@@ -133,11 +139,21 @@ corr_gen <- function(ind_df,ind_vec,pk_n,corr_method,out_dir,plot_name){
          legend.cex = 0.4,
          title = "Correlations Network for Digital Exclusion Indicators",
          line = -2,
-         cex.main = 1.5,
-         filetype = "png",
-         filename = paste0(out_dir,plot_name))
+         #cex.main = 1.5,
+         filetype = "jpg",
+         filename = paste0(out_dir,net_plot_name))
 }
 
+#### This function generated the composite index from the input variables
+
+# ind_df=DER_raw_norm.df
+# ind_vec=int_ind_vec
+# pk_n=3
+# corr_method=c("pearson")
+# dim_factor=2
+
+# ggplot(tmp.df, aes(x=lt10mb_pc)) +
+#   geom_histogram()
 
 comp_ind_gen <- function(ind_df,ind_vec,pk_n,corr_method,dim_factor){
   ### Create a dataframe with just the required variables
@@ -165,6 +181,70 @@ comp_ind_gen <- function(ind_df,ind_vec,pk_n,corr_method,dim_factor){
   
 }
 
+##### This function generates the required maps
+
+# ind_data=Final_CompI
+# geo_dir=geo_dir
+# layer="Lincolnshire LSOA"
+# poly_name = "LSOA.name"
+# rank_var="Factor_Rank"
+# label_header ="Factor Rank: "
+
+
+map_ind_linc <-  function(ind_data,geo_dir,layer,label_name,rank_var,label_header){
+
+  ## Read Lincolnshire data 
+  lsoa_data <-  readOGR(dsn = geo_dir,
+                        layer = layer)
+  ### Project to Lat Long
+  lsoa_data_ll <- spTransform(lsoa_data, CRS("+init=epsg:4326"))
+  
+  ## merge factor data 
+  lsoa_data_ll_CI <- sp::merge(lsoa_data_ll,ind_data,
+                               by.x='AreaCode',by.y='lsoa_code',all.x=TRUE)
+
+  ## Define Polygon Colours from red to white based on ranking variable
+  pal <- colorNumeric(
+    palette = colorRampPalette(c('red', 'white'))(length(lsoa_data_ll_CI[[rank_var]])), 
+    domain = lsoa_data_ll_CI[[rank_var]])
+
+  
+
+  
+  ### labels 
+  labs <- lapply(seq(nrow(lsoa_data_ll_CI@data)), function(i) {
+      paste0( '<p>', lsoa_data_ll_CI@data[i, label_name], '<p></p>',
+              label_header,
+              lsoa_data_ll_CI@data[i, rank_var], '</p>' )
+    })
+
+ ### Produce the map
+ ### NB need to work out how to pass the reference to Factor_Rank to the function 
+ 
+ lsoa_linc_map <- leaflet(options = leafletOptions(minZoom = 9)) %>%
+   addMapPane(name = "fac_poly", zIndex = 410) %>%
+   addMapPane(name = "maplabels", zIndex = 420) %>% # higher zIndex rendered on top
+   addProviderTiles("CartoDB.PositronNoLabels") %>%
+   addProviderTiles("CartoDB.PositronOnlyLabels",
+                    options = leafletOptions(pane = "maplabels"),
+                    group = "map labels") %>%
+   addPolygons(data = lsoa_data_ll_CI, stroke = TRUE,
+               fillOpacity = 0.5, smoothFactor = 0.5, weight=1.0,
+               fillColor = ~ pal(x=Factor_Rank),
+               label = lapply(labs, htmltools::HTML),
+               group = "fac_poly",
+               options = leafletOptions(pane = "fac_poly")) %>%
+   addLegend(data = lsoa_data_ll_CI,
+             "topright", pal = pal, values = ~Factor_Rank, title = "Rank")
+lsoa_linc_map
+  
+}  
+
+
+
+
+
+
 
 
 ### Load data 
@@ -177,59 +257,54 @@ geo_dir <- 'C:/Users/pmee/OneDrive - University of Lincoln/Projects/Digital_Excl
 ### Output directory 
 out_dir <- 'C:/Users/pmee/OneDrive - University of Lincoln/Projects/Digital_Exclusion_Lincolnshire/Figures/'
 
-### Original equal weight rankings 
-data_file <- 'Digital Exclusion Rankings.csv'
-## Ranked data 
-### Loading orginal rankings and overall equal weight rankings 
-### Rankings from 1 most deprived to n least deprived
-DER.df <- read.csv2(file=paste0(data_dir,data_file),header = TRUE,sep = ",")
-
-### Rename columns for consistency with other dataframes
-
-names(DER.df)[6] <- "NQU"
-names(DER.df)[7] <- "GPC"
-names(DER.df)[8] <- "UNP"
-names(DER.df)[9] <- "INT"
-names(DER.df)[10] <- "DER"
-names(DER.df)[11] <- "LAC"
-names(DER.df)[12] <- "TRP"
-names(DER.df)[13] <- "EXP"
 
 
 ### Load raw data - sources of data used in the rankings 
 
 data_raw <- 'Source_data_Lincoln-v3_March_2023.xlsx'
-DER_linc.df <- readxl::read_xlsx(paste0(data_dir,data_raw),range = "A3:T423",col_names = TRUE )
+DER_raw.df <- readxl::read_xlsx(paste0(data_dir,data_raw),range = "A3:T423",col_names = TRUE )
 
-DER_raw.df <- DER_linc.df 
 
 ### Rename columns 
 #########
 ### Better to use dplyr rename function to avoid any ambiguity with column positions 
 #########
 
-names(DER_raw.df)[1] <- "la_name"
-names(DER_raw.df)[2] <- "lsoa_name"
-names(DER_raw.df)[3] <- "lsoa_code"
-names(DER_raw.df)[4] <- "exp_group"
-names(DER_raw.df)[5] <- "nqr_pc"
-names(DER_raw.df)[6] <- "gpc_rate"
-names(DER_raw.df)[7] <- "unp_rate"
-names(DER_raw.df)[8] <- "de_pc"
-names(DER_raw.df)[9] <- "lac_pc"
-names(DER_raw.df)[10] <- "dwnld_speed"
-names(DER_raw.df)[11] <- "lt10mb_pc"
-names(DER_raw.df)[12] <- "gp_pt15"
-names(DER_raw.df)[13] <- "gp_pt30"
-names(DER_raw.df)[14] <- "gp_car15"
-names(DER_raw.df)[15] <- "pharm_car_15"
-names(DER_raw.df)[16] <- "exp_smph"
-names(DER_raw.df)[17] <- "exp_ns"
-names(DER_raw.df)[18] <- "exp_email"
-names(DER_raw.df)[19] <- "exp_im"
-names(DER_raw.df)[20] <- "exp_sn"
+DER_raw.df <- dplyr::rename(DER_raw.df, "la_name" = "Local authority name")
+DER_raw.df <- dplyr::rename(DER_raw.df, "lsoa_name" = "LSOA name")
+DER_raw.df <- dplyr::rename(DER_raw.df, "lsoa_code" = "LSOA Code")
+DER_raw.df <- dplyr::rename(DER_raw.df, "exp_group" = "Experian Group")
+DER_raw.df <- dplyr::rename(DER_raw.df, "nqr_pc" = "Percentage of residents aged 16+ with no qualifications")
+DER_raw.df <- dplyr::rename(DER_raw.df, "gpc_rate" = "Guaranteed pension credit (rate per 1,000 aged 65+)")
+DER_raw.df <- dplyr::rename(DER_raw.df, "unp_rate" = "Unemployment rate")
+DER_raw.df <- dplyr::rename(DER_raw.df, "de_pc" = "Percentage of population in social grade DE")
+DER_raw.df <- dplyr::rename(DER_raw.df, "lac_pc" = "Day-to-day activities limited a lot %")
+DER_raw.df <- dplyr::rename(DER_raw.df, "dwnld_speed" = "Average download speed (Mbit/s)")
+DER_raw.df <- dplyr::rename(DER_raw.df, "lt10mb_pc" = "Percentage of connections receiving less than 10Mbit/s broadband")
+DER_raw.df <- dplyr::rename(DER_raw.df, "gp_pt15_pc" = "GP PT 15 minutes %")
+DER_raw.df <- dplyr::rename(DER_raw.df, "gp_pt30_pc" = "GP PT 30 minutes %")
+DER_raw.df <- dplyr::rename(DER_raw.df, "gp_car15_pc" = "GP Car 15 minutes %")
+DER_raw.df <- dplyr::rename(DER_raw.df, "pharm_car_15_pc" = "Pharmacy Car 15 minutes %")
+DER_raw.df <- dplyr::rename(DER_raw.df, "exp_smph" = "Smartphone")
+DER_raw.df <- dplyr::rename(DER_raw.df, "exp_ns" = "Not savvy at all")
+DER_raw.df <- dplyr::rename(DER_raw.df, "exp_email" = "Email")
+DER_raw.df <- dplyr::rename(DER_raw.df, "exp_im" = "Instant messaging")
+DER_raw.df <- dplyr::rename(DER_raw.df, "exp_sn" = "Social networking")
 
-### STEP 1 - Data normalisation 
+ggplot(DER_raw.df, aes(x=dwnld_speed)) +
+  geom_histogram()
+
+## STEP 1 Inverting order of variables so that lowest score = biggest problem
+
+DER_raw.df$de_pc <- DER_raw.df$de_pc*-1
+DER_raw.df$gpc_rate <- DER_raw.df$gpc_rate*-1
+DER_raw.df$lac_pc <- DER_raw.df$lac_pc*-1
+DER_raw.df$nqr_pc <- DER_raw.df$nqr_pc*-1
+DER_raw.df$unp_rate <- DER_raw.df$unp_rate*-1
+DER_raw.df$lt10mb_pc <- DER_raw.df$lt10mb_pc*-1
+DER_raw.df$exp_ns <- DER_raw.df$exp_ns*-1
+
+### STEP 2 - Data normalisation 
 ### Normalise the data so all variables in the same range
 ### To enable appropriate comparison 
 
@@ -237,185 +312,240 @@ names(DER_raw.df)[20] <- "exp_sn"
 DER_raw_norm.df <- DER_raw.df
 DER_raw_norm.df[-(1:4)] <- lapply(DER_raw_norm.df[-(1:4)], BBmisc::normalize)
 
-### Raw data 
-p1 <- ggplot(DER_raw.df, aes(x=unp_rate)) + 
-  geom_histogram()
-p1
-### Normalised data
-p2 <- ggplot(DER_raw_norm.df, aes(x=unp_rate)) + 
-  geom_histogram()
-p2
+
+### Generate Factor Scores for subsets of variables and then combine in one composite
+
+### Transport Variables 
+trans_ind_vec <- (c('la_name','lsoa_name','lsoa_code','gp_pt15_pc','gp_pt30_pc','gp_car15_pc','pharm_car_15_pc'))
 
 
-# ### Checking effect
-# 
-# DER_check.df <- merge(DER.df,DER_raw_norm.df,by.x="LSOA.Code",by.y="lsoa_code")
-# 
-# ggplot(DER_check.df, aes(x=gpc_rate, y=GPC)) + 
-#   geom_point()
-
-
-## Inverting order of variables so that lowest score = biggest problem
-
-DER_raw_norm.df$de_pc <- DER_raw_norm.df$de_pc*-1
-DER_raw_norm.df$gpc_rate <- DER_raw_norm.df$gpc_rate*-1
-DER_raw_norm.df$lac_pc <- DER_raw_norm.df$lac_pc*-1
-DER_raw_norm.df$nqr_pc <- DER_raw_norm.df$nqr_pc*-1
-DER_raw_norm.df$unp_rate <- DER_raw_norm.df$unp_rate*-1
-DER_raw_norm.df$lt10mb_pc <- DER_raw_norm.df$lt10mb_pc*-1
-
-
-## Experian
-## Indicator equals proportion using each technology or for ns (proportion not savvy).
-## Therefore for ns change sign 
-DER_raw_norm.df$exp_ns <- DER_raw_norm.df$exp_ns*-1
-
-################
-### This Version pass sets of variables to a function which calculates combined index
-### and generates the other figures
-################
-
-trans_ind_vec <- (c('la_name','lsoa_name','lsoa_code','gp_pt15','gp_pt30','gp_car15','pharm_car_15'))
 
 Final_CI_transport <- comp_ind_gen(ind_df=DER_raw_norm.df
                        ,ind_vec=trans_ind_vec
                        ,pk_n=3
-                       ,corr_method=c("spearman")
+                       ,corr_method=c("pearson")
                        ,dim_factor=3)
 
-other_ind_vec <- (c('la_name','lsoa_name','lsoa_code','nqr_pc','gpc_rate','unp_rate','de_pc','lac_pc',
-                    'dwnld_speed','lt10mb_pc','exp_smph','exp_ns','exp_email','exp_im','exp_sn'))
+### Generate a normalised combined indicator
+trans_score <- select(Final_CI_transport, c('lsoa_code','Factor_Score'))
+trans_score[-(1:1)] <- lapply(trans_score[-(1:1)], BBmisc::normalize)
+trans_score <- dplyr::rename(trans_score, "TRP" = "Factor_Score")
 
-Final_CI_main <- comp_ind_gen(ind_df=DER_raw_norm.df
-                                   ,ind_vec=other_ind_vec
+### Internet variables
+# int_ind_vec <- (c('la_name','lsoa_name','lsoa_code','dwnld_speed','lt10mb_pc'))
+# 
+# Final_CI_int <- comp_ind_gen(ind_df=DER_raw_norm.df
+#                                    ,ind_vec=int_ind_vec
+#                                    ,pk_n=3
+#                                    ,corr_method=c("pearson")
+#                                    ,dim_factor=2)
+# ### Generate a normalised combined indicator
+# int_score <- select(Final_CI_int, c('lsoa_code','Factor_Score'))
+# int_score[-(1:1)] <- lapply(int_score[-(1:1)], BBmisc::normalize)
+# int_score <- dplyr::rename(int_score, "INT" = "Factor_Score")
+
+### Experian variables
+exp_ind_vec <- (c('la_name','lsoa_name','lsoa_code','exp_smph','exp_ns','exp_email','exp_im','exp_sn'))
+
+Final_CI_exp <- comp_ind_gen(ind_df=DER_raw_norm.df
+                                   ,ind_vec=exp_ind_vec
                                    ,pk_n=3
                                    ,corr_method=c("pearson")
-                                   ,dim_factor=3)
+                                   ,dim_factor=2)
 
-### Output for online tool
+### Generate a normalised combined indicator
+exp_score <- select(Final_CI_exp, c('lsoa_code','Factor_Score'))
+exp_score[-(1:1)] <- lapply(exp_score[-(1:1)], BBmisc::normalize)
+exp_score <- dplyr::rename(exp_score, "EXP" = "Factor_Score")
 
-DER_fact_summary.df <- DER_norm_CI.df[,c('la_name','lsoa_name','lsoa_code','Factor_Rank')]
+#### Create a dataframe with all indicators for final Composite
 
-write.csv(DER_fact_summary.df,paste0(out_dir,'factor_rank.csv'))
+main_ind <- select(DER_raw_norm.df, c('lsoa_code','nqr_pc','gpc_rate','unp_rate','de_pc','lac_pc'))
 
+Final_CI_transport <- dplyr::rename(Final_CI_transport, "G15" = "gp_pt15_pc")
+Final_CI_transport <- dplyr::rename(Final_CI_transport, "G30" = "gp_pt30_pc")
+Final_CI_transport <- dplyr::rename(Final_CI_transport, "C15" = "gp_car15_pc")
+Final_CI_transport <- dplyr::rename(Final_CI_transport, "P15" = "pharm_car_15_pc")
+
+main_ind <- dplyr::rename(main_ind, "NQR" = "nqr_pc")
+main_ind <- dplyr::rename(main_ind, "GPC" = "gpc_rate")
+main_ind <- dplyr::rename(main_ind, "UNP" = "unp_rate")
+main_ind <- dplyr::rename(main_ind, "DER" = "de_pc")
+main_ind <- dplyr::rename(main_ind, "LAC" = "lac_pc")
+
+
+#### Alternative to combined internent variable just use download speed
+
+dwnld_ind <- select(DER_raw_norm.df, c('lsoa_code','dwnld_speed'))
+dwnld_ind <- dplyr::rename(dwnld_ind, "INT" = "dwnld_speed")
+
+### Combine into one dataframe
+
+#all_ind <- merge(main_ind,int_score,by='lsoa_code')
+all_ind <- merge(main_ind,dwnld_ind,by='lsoa_code')
+all_ind <- merge(all_ind,exp_score,by='lsoa_code')
+
+
+#### Finally create a single composite
+
+final_comp_vec <- (c('lsoa_code','NQR','GPC','UNP','DER','LAC','INT','EXP'))
+
+### Correlation Checking and Composite indicator generation
+
+
+### Transport
+
+trans_new_vec <- (c('lsoa_code','G15','G30','C15','P15'))
+
+
+corr_gen(ind_df = Final_CI_transport,
+         ind_vec = trans_new_vec,
+         pk_n =1,
+         corr_method = "pearson",
+         out_dir = out_dir,
+         corr_plot_name = 'final_corr_trans',
+         net_plot_name = 'final_network_trans')
+
+
+corr_gen(ind_df = all_ind,
+         ind_vec = final_comp_vec,
+         pk_n =1,
+         corr_method = "pearson",
+         out_dir = out_dir,
+         corr_plot_name = 'final_corr_all',
+         net_plot_name = 'final_network_all')
+
+Final_CompI <- comp_ind_gen(ind_df=all_ind
+                             ,ind_vec=final_comp_vec
+                             ,pk_n=1
+                             ,corr_method=c("pearson")
+                             ,dim_factor=3)
+
+all_CompI <- merge(DER_raw.df,Final_CompI,by='lsoa_code')
 
 ### interpretation of factor analysis 
 #https://www.geo.fu-berlin.de/en/v/soga/Geodata-analysis/factor-analysis/A-simple-example-of-FA/index.html 
-digex.fa <- factanal(DER_norm_tmp.df[,c(4:ncol(DER_norm_tmp.df))], factors = 3)
+digex.fa <- factanal(all_ind[,c(2:ncol(all_ind))], factors = 3)
 digex.fa
 
 digex.fa$uniquenesses
 
 digex.fa$loadings
 
+
+### Output to a file as Communality and Uniqueness
 # Communality 
 fname = paste0(out_dir,'tmp.csv')
-
-
 tmp.df <- data.frame(apply(digex.fa$loadings^2,1,sum)) # communality
-
 names(tmp.df)[1] <- "comm"
-
 tmp.df$comm <- as.numeric(tmp.df$comm)
-
-
-# Uniqueness
-tmp.df$unique <- 1 - apply(digex.fa$loadings^2,1,sum) # uniqueness
-
-write.csv(tmp.df,fname)
+# Uniqueness - check
+# tmp.df$unique <- 1 - apply(digex.fa$uniquenesses^2,1,sum) # uniqueness
+# write.csv(tmp.df,fname)
 
 #### Mapping
+#### Currently the rank variable has to be 'Factor_Rank"
+
+Main_Map <- map_ind_linc(ind_data=all_CompI,
+             geo_dir=geo_dir,
+             layer="Lincolnshire LSOA",
+             label_name = "lsoa_name",
+             rank_var="Factor_Rank",
+             label_header ="Factor Rank: ")
+  
+setView(Main_Map, lng=-0.1999702,lat=53.1178821,zoom = 9.4)
+# Save as png
+map_file <- 'linc_main_map_1_5.jpg'
+mapview::mapshot(Main_Map, file = paste0(out_dir,map_file),zoom=1.5)
+
+Trans_Map <- map_ind_linc(ind_data=Final_CI_transport,
+                         geo_dir=geo_dir,
+                         layer="Lincolnshire LSOA",
+                         label_name = "lsoa_name",
+                         rank_var="Factor_Rank",
+                         label_header ="Factor Rank: ")
+
+setView(Trans_Map, lng=-0.1999702,lat=53.1178821,zoom = 9.4)
+# Save as png
+map_file <- 'linc_trans_map.jpg'
+mapview::mapshot(Trans_Map, file = paste0(out_dir,map_file,zoom=15.0))
+  
+  
+#### Rank LSOA's into quartiles and identify those with high/high high/low etc. for multiple composites
+n_quant=2
+
+main_quant <- select(Final_CompI, c('lsoa_code','Factor_Rank'))
+main_quant$main_quant <-  schoRsch::ntiles(main_quant, dv = "Factor_Rank", bins=n_quant)
+main_quant <- dplyr::rename(main_quant, "Factor_Rank_main" = "Factor_Rank")
+
+trans_quant <- select(Final_CI_transport, c('lsoa_code','Factor_Rank'))
+trans_quant$trans_quant <-  schoRsch::ntiles(trans_quant, dv = "Factor_Rank", bins=n_quant)
+trans_quant <- dplyr::rename(trans_quant, "Factor_Rank_trans" = "Factor_Rank")
+
+#### Merge DataFrames
+
+main_trans_quant <- merge(main_quant,trans_quant,by='lsoa_code')
+
+### Add LSOA names 
+
+all_trans_quant <- merge(DER_raw.df,main_trans_quant,by='lsoa_code')
+
+#### Create a Map of the combined data 
+
+main_trans_quant$Overall <- ""
+main_trans_quant[main_trans_quant$main_quant == 1 & 
+                main_trans_quant$trans_quant == 1, "Overall"] <- "High:High"
+main_trans_quant[main_trans_quant$main_quant == 1 & 
+                   main_trans_quant$trans_quant == 2, "Overall"] <- "High:Low"
+main_trans_quant[main_trans_quant$main_quant == 2 & 
+                   main_trans_quant$trans_quant == 1, "Overall"] <- "Low:High"
+main_trans_quant[main_trans_quant$main_quant == 2 & 
+                   main_trans_quant$trans_quant == 2, "Overall"] <- "Low:Low"
 
 
-### Display on a map
-### Only needed if mapping in R 
-
-
-### Read shapefile data 
-# lsoa_uk <-  readOGR(dsn = geo_dir,
-#                  layer = "LSOA_2021_EW_BSC")
-
-## Lincolnshire data 
-lsoa_linc <-  readOGR(dsn = geo_dir,
-                 layer = "Lincolnshire LSOA")
-
+## Read Lincolnshire data 
+lsoa_data <-  readOGR(dsn = geo_dir,
+                      layer = "Lincolnshire LSOA")
 ### Project to Lat Long
-lsoa_linc_ll <- spTransform(lsoa_linc, CRS("+init=epsg:4326"))
+lsoa_data_ll <- spTransform(lsoa_data, CRS("+init=epsg:4326"))
 
 ## merge factor data 
+lsoa_data_ll_CI <- sp::merge(lsoa_data_ll,main_trans_quant,
+                             by.x='AreaCode',by.y='lsoa_code',all.x=TRUE)
 
-lsoa_linc_ll_CI <- sp::merge(lsoa_linc_ll,Final_CI_transport,
-                         by.x='AreaCode',by.y='lsoa_code',all.x=TRUE)
+## Create a colour palette
+pal <- colorFactor(
+  palette = 'Set1',
+  domain = lsoa_data_ll_CI$Overall
+)
 
-## Polygon Colours
-
-pal <- colorNumeric(
-  palette = colorRampPalette(c('red', 'white'))(length(lsoa_linc_ll_CI$Factor_Rank)), 
-  domain = lsoa_linc_ll_CI$Factor_Rank)
-
-
-### Maps
-
-
-
-tag.map.title <- tags$style(HTML("
-  .leaflet-control.map-title { 
-    transform: translate(-50%,20%);
-    position: fixed !important;
-    left: 50%;
-    text-align: center;
-    padding-left: 10px; 
-    padding-right: 10px; 
-    background: rgba(255,255,255,0.75);
-    font-weight: bold;
-    font-size: 12px;
-  }
-"))
-
-
-
-
-### Display Factor analysis in map
-labs <- lapply(seq(nrow(lsoa_linc_ll_CI@data)), function(i) {
-  paste0( '<p>', lsoa_linc_ll_CI@data[i, "LSOA.name"], '<p></p>',
+### labels 
+labs <- lapply(seq(nrow(lsoa_data_ll_CI@data)), function(i) {
+  paste0( '<p>', lsoa_data_ll_CI@data[i, "lsoa_name"], '<p></p>',
           "Factor Rank: ",
-          lsoa_linc_ll_CI@data[i, "Factor_Rank"], '</p>' )
+          lsoa_data_ll_CI@data[i, "Overall"], '</p>' )
 })
 
-title <- tags$div(
-  tag.map.title, HTML("Lincolnshire LSOA Digital Exclusion Ranks   Factors")
-)  
+### Produce the map
+### NB need to work out how to pass the reference to Factor_Rank to the function 
 
-lsoa_linc_map <- leaflet(options = leafletOptions(minZoom = 9)) %>%
-  # Choose here whether to use Open Street Map or Satellite imagery data in the background
-  # addProviderTiles("Esri.WorldImagery") %>%
-  addMapPane(name = "fac_poly", zIndex = 410) %>% 
+lsoa_digex_trans_map <- leaflet(options = leafletOptions(minZoom = 9)) %>%
+  addMapPane(name = "fac_poly", zIndex = 410) %>%
   addMapPane(name = "maplabels", zIndex = 420) %>% # higher zIndex rendered on top
   addProviderTiles("CartoDB.PositronNoLabels") %>%
-  addProviderTiles("CartoDB.PositronOnlyLabels", 
+  addProviderTiles("CartoDB.PositronOnlyLabels",
                    options = leafletOptions(pane = "maplabels"),
                    group = "map labels") %>%
-  addPolygons(data = lsoa_linc_ll_CI, stroke = TRUE, 
+  addPolygons(data = lsoa_data_ll_CI, stroke = TRUE,
               fillOpacity = 0.5, smoothFactor = 0.5, weight=1.0,
-              fillColor = ~ pal(Factor_Rank),
+              fillColor = ~ pal(x=Overall),
               label = lapply(labs, htmltools::HTML),
               group = "fac_poly",
               options = leafletOptions(pane = "fac_poly")) %>%
-  #addProviderTiles("OpenStreetMap.Mapnik") %>%
- 
-  addLegend(data = lsoa_linc_ll_CI, 
-            "topright", pal = pal, values = ~Factor_Rank, title = "Rank") 
-  #addControl(title, position = "topleft", className="map-title") 
-  # addLayersControl(baseGroups = "CartoDB.PositronNoLabels",
-  #                  overlayGroups = c("map labels",
-  #                                    "fac_poly"))
-
-setView(lsoa_linc_map, lng=-0.1999702,lat=53.1178821,zoom = 9.4)
+  addLegend(data = lsoa_data_ll_CI,
+            "topright", pal = pal, values = ~Overall, title = "Digital Exclusion:Transport Barrier")
+setView(lsoa_digex_trans_map, lng=-0.1999702,lat=53.1178821,zoom = 9.4)
 
 ## Save as png
-# map_file <- 'linc_factor_map.png'
-# mapview::mapshot(lsoa_linc_map, file = paste0(out_dir,map_file))
-
-
-
-
+map_file <- 'linc_main_trans_map.jpg'
+mapview::mapshot(lsoa_digex_trans_map, file = paste0(out_dir,map_file))
